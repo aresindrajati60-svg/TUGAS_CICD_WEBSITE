@@ -18,23 +18,25 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
         run: |
-          echo "Checking required secrets..."
-
-          if [ -z "$SERVER_IP" ]; then
-            echo "SERVER_IP kosong ❌"
-            exit 1
-          fi
-
-          if [ -z "$SSH_PRIVATE_KEY" ]; then
-            echo "SSH_PRIVATE_KEY kosong ❌"
+          if [ -z "$SERVER_IP" ] || [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "Secret kosong ❌"
             exit 1
           fi
 
           mkdir -p $HOME/.ssh
-          echo "$SSH_PRIVATE_KEY" > $HOME/.ssh/tes_server_polindra
-          chmod 600 $HOME/.ssh/tes_server_polindra
+          echo "$SSH_PRIVATE_KEY" > $HOME/.ssh/id_rsa
+          chmod 600 $HOME/.ssh/id_rsa
 
-          ssh-keyscan -p 8022 -H "$SERVER_IP" >> $HOME/.ssh/known_hosts
+      - name: Test SSH Connection
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              -p 8022 \
+              -i $HOME/.ssh/id_rsa \
+              $SERVER_USER@$SERVER_IP "echo SSH CONNECTED"
 
       - name: Deploy to Server
         env:
@@ -42,12 +44,8 @@ jobs:
           SERVER_IP: ${{ secrets.SERVER_IP }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          if [ -z "$SERVER_USER" ] || [ -z "$SERVER_IP" ] || [ -z "$DEPLOY_PATH" ]; then
-            echo "Salah satu secret deploy kosong ❌"
-            exit 1
-          fi
-
           rsync -avz --delete \
-            -e "ssh -p 8022 -i $HOME/.ssh/tes_server_polindra" \
+            --timeout=20 \
+            -e "ssh -o StrictHostKeyChecking=no -p 8022 -i $HOME/.ssh/id_rsa" \
             ./ \
             "$SERVER_USER@$SERVER_IP:$DEPLOY_PATH"
